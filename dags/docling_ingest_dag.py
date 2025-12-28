@@ -11,6 +11,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime
 from extract_pages import extract_pdf_pages
+from process_document import process_document
 
 # Paths relative to project root
 PDF_PATH = "docs/future_queen.pdf"
@@ -39,4 +40,13 @@ with DAG(
         }
     )
 
-    extract_task
+    process_task = PythonOperator(
+        task_id="process_document",
+        python_callable=process_document,
+        op_kwargs={
+            "input_dir": "temp_docs"
+        }
+    )
+
+    # Set task dependencies: process_task runs after extract_task
+    extract_task >> process_task
