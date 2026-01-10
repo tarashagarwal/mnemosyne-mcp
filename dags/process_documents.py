@@ -9,6 +9,7 @@ import numpy as np
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 from sentence_transformers import SentenceTransformer
+from pathlib import Path
 
 
 PAGE_RE = re.compile(r"page[_\- ](\d+)", re.IGNORECASE)
@@ -24,6 +25,7 @@ class IngestConfig:
     chunk_words: int = 50
     batch_size: int = 64
     file_ext_allowlist: Tuple[str, ...] = (".md", ".txt")
+    book_name: str = "future queen"
 
 
 def extract_page_number(filename: str) -> Optional[int]:
@@ -115,6 +117,7 @@ def build_points_for_file(
     for idx, chunk_text in enumerate(chunks):
         payload: Dict = {
             "source_file": filename,
+            "book_name": cfg.book_name,       # hardcoded book name
             "page_number": page_number,       # can be None if not found
             "chunk_index": idx,               # 0-based chunk position in that page
             "page_text": page_text,           # whole page
@@ -133,11 +136,24 @@ def build_points_for_file(
     return points
 
 
-def process_documents(cfg: IngestConfig) -> Dict[str, int]:
+def process_documents() -> Dict[str, int]:
     """
     Main function you call from an Airflow task.
     Returns stats useful for logs/XCom.
     """
+    project_root = Path(__file__).resolve().parents[1]
+
+    input_dir = project_root / "temp_docs"
+
+    cfg = IngestConfig(
+        input_dir=str(input_dir),
+        collection_name="mnemosyne_pages",
+        qdrant_host="localhost",
+        qdrant_port=6333,
+        chunk_words=50,
+        batch_size=64,
+    )
+
     if not os.path.isdir(cfg.input_dir):
         raise FileNotFoundError(f"Input dir not found: {cfg.input_dir}")
 

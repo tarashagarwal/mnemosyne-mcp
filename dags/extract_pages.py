@@ -79,6 +79,7 @@ def main():
     project_root = Path(__file__).resolve().parents[1]
 
     pdf_path = project_root / "docs/future_queen.pdf"
+    print(pdf_path)
     book_name = "future_queen"
     output_dir = project_root / "temp_docs"
 
