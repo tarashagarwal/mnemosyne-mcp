@@ -9,36 +9,68 @@ client = QdrantClient("localhost", port=6333)
 model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 COLLECTION = "mnemosyne_pages"
 
-class QueryRequest(BaseModel):
+
+class SearchRequest(BaseModel):
     query: str
     top_k: int = 10
 
 
-@app.post("/query")
-def query_pages(req: QueryRequest):
-    vector = model.encode(req.query).tolist()
+@app.post("/search")
+def search(req: SearchRequest):
+    query_vector = model.encode(req.query).tolist()
 
-    results = client.search(
+    result = client.query_points(
         collection_name=COLLECTION,
-        query_vector=vector,
+        prefetch=[],
+        query=query_vector,
         limit=req.top_k,
+        with_payload=True,
     )
 
-    # Deduplicate by page
+    hits = result.points
+
+    # Filter matches with similarity >= 90% (0.9)
+    MIN_SIMILARITY = 0.8
+    SUBSTRING_BOOST = 0.20
+
+    # Apply substring boost and filter
+    query_lower = req.query.lower()
+    filtered_hits = []
+    for h in hits:
+        chunk_text_lower = h.payload["chunk_text"].lower()
+        adjusted_score = h.score
+        
+        # If query is a substring of chunk text, add boost
+        if query_lower in chunk_text_lower:
+            adjusted_score = min(1.0, h.score + SUBSTRING_BOOST)
+        
+        # Filter by adjusted score
+        if adjusted_score >= MIN_SIMILARITY:
+            # Update the score in the hit object
+            h.score = adjusted_score
+            filtered_hits.append(h)
+
+    # group by page
     pages = {}
-    for r in results:
-        payload = r.payload
-        page = payload["page_number"]
+
+    for h in filtered_hits:
+        p = h.payload
+        page = p["page_number"]
 
         if page not in pages:
             pages[page] = {
                 "page_number": page,
-                "source_file": payload["source_file"],
-                "page_text": payload["page_text"],
+                "page_text": p["page_text"],
+                "matches": [],
             }
+
+        pages[page]["matches"].append({
+            "chunk_text": p["chunk_text"],
+            "chunk_index": p["chunk_index"],
+            "score": h.score,
+        })
 
     return {
         "query": req.query,
-        "pages": list(pages.values())
+        "pages": list(pages.values()),
     }
-

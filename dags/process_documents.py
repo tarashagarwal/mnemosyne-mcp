@@ -210,7 +210,7 @@ if __name__ == "__main__":
         qdrant_host="localhost",
         qdrant_port=6333,
         embedding_model="sentence-transformers/all-MiniLM-L6-v2",
-        chunk_words=50,
+        chunk_words=10,
         batch_size=64,
     )
     stats = process_documents(cfg)
