@@ -74,3 +74,13 @@ def search(req: SearchRequest):
         "query": req.query,
         "pages": list(pages.values()),
     }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    
+    print("Starting MCP Server...")
+    print("Server will be available at http://localhost:8000")
+    print("API docs available at http://localhost:8000/docs")
+    
+    uvicorn.run(app, host="0.0.0.0", port=8000)
