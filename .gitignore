@@ -209,3 +209,4 @@ airflow-venv
 docs/
 temp_docs/
 qdrant_storage/
+.env
