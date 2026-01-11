@@ -13,7 +13,7 @@ from airflow.operators.python import PythonOperator
 from datetime import datetime
 from extract_pages import extract_pdf_pages
 from process_documents import process_documents
-
+from mark_book_available import mark_book_available
 # Load books from books.json
 project_root = Path(__file__).parent.parent
 books_json_path = project_root / "docs" / "books.json"
@@ -75,5 +75,14 @@ with DAG(
             }
         )
         
-        # Set dependencies: process runs after extract for this book
-        extract_task >> process_task
+        # Create mark_book_available task for this book
+        mark_available_task = PythonOperator(
+            task_id=f"mark_book_available_{book_name}",
+            python_callable=mark_book_available,
+            op_kwargs={
+                "book_data": book
+            }
+        )
+        
+        # Set dependencies: process runs after extract, mark_available runs after process
+        extract_task >> process_task >> mark_available_task
