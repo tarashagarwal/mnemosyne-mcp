@@ -180,6 +180,7 @@ def check_book_availability(
             "message": str(e),
             "book": None
         }
+        
     except Exception as e:
         return {
             "available": False,
