@@ -136,14 +136,19 @@ def build_points_for_file(
     return points
 
 
-def process_documents() -> Dict[str, int]:
+def process_documents(input_dir: Optional[str] = None, book_name: Optional[str] = None) -> Dict[str, int]:
     """
     Main function you call from an Airflow task.
     Returns stats useful for logs/XCom.
     """
     project_root = Path(__file__).resolve().parents[1]
 
-    input_dir = project_root / "temp_docs"
+    if input_dir is None:
+        input_dir = project_root / "temp_docs"
+    else:
+        input_dir = Path(input_dir)
+        if not input_dir.is_absolute():
+            input_dir = project_root / input_dir
 
     cfg = IngestConfig(
         input_dir=str(input_dir),
@@ -152,6 +157,7 @@ def process_documents() -> Dict[str, int]:
         qdrant_port=6333,
         chunk_words=50,
         batch_size=64,
+        book_name=book_name,
     )
 
     if not os.path.isdir(cfg.input_dir):

@@ -1,5 +1,6 @@
 import sys
 import os
+import json
 from pathlib import Path
 
 # Add the dags directory to Python path for imports
@@ -13,14 +14,29 @@ from datetime import datetime
 from extract_pages import extract_pdf_pages
 from process_documents import process_documents
 
-# Paths relative to project root
-PDF_PATH = "docs/future_queen.pdf"
-BOOK_NAME = "future_queen"
+# Load books from books.json
+project_root = Path(__file__).parent.parent
+books_json_path = project_root / "docs" / "books.json"
+
+try:
+    with open(books_json_path, 'r') as f:
+        books_data = json.load(f)
+    books = books_data.get("books", [])
+except FileNotFoundError:
+    print(f"Warning: books.json not found at {books_json_path}")
+    books = []
+except json.JSONDecodeError as e:
+    print(f"Error parsing books.json: {e}")
+    books = []
 
 default_args = {
     "owner": "airflow",
     "retries": 0
 }
+
+def normalize_book_name(file_name: str) -> str:
+    """Convert file name to book name (remove extension, replace underscores/hyphens)"""
+    return Path(file_name).stem.replace("_", "_").lower()
 
 with DAG(
     dag_id="docling_pdf_page_ingestion",
@@ -31,22 +47,33 @@ with DAG(
     tags=["docling", "pdf", "mcp"]
 ) as dag:
 
-    extract_task = PythonOperator(
-        task_id="extract_pdf_pages",
-        python_callable=extract_pdf_pages,
-        op_kwargs={
-            "pdf_path": PDF_PATH,
-            "book_name": BOOK_NAME
-        }
-    )
-
-    process_task = PythonOperator(
-        task_id="process_documents",
-        python_callable=process_documents,
-        op_kwargs={
-            "input_dir": "temp_docs"
-        }
-    )
-
-    # Set task dependencies: process_task runs after extract_task
-    extract_task >> process_task
+    # Create tasks for each book
+    for book in books:
+        file_name = book["file_name"]
+        title = book["title"]
+        book_name = normalize_book_name(file_name)
+        pdf_path = project_root / "docs" / file_name
+        
+        # Create extract task for this book
+        extract_task = PythonOperator(
+            task_id=f"extract_pdf_pages_{book_name}",
+            python_callable=extract_pdf_pages,
+            op_kwargs={
+                "pdf_path": str(pdf_path),
+                "book_name": book_name,
+                "output_dir": str(project_root / "temp_docs" / book_name)
+            }
+        )
+        
+        # Create process task for this book
+        process_task = PythonOperator(
+            task_id=f"process_documents_{book_name}",
+            python_callable=process_documents,
+            op_kwargs={
+                "input_dir": f"temp_docs/{book_name}",
+                "book_name": title.lower()
+            }
+        )
+        
+        # Set dependencies: process runs after extract for this book
+        extract_task >> process_task

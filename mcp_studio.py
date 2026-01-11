@@ -25,7 +25,7 @@ def search_book(query: str, top_k: int = 10):
 
     hits = result.points
 
-    MIN_SIMILARITY = 0.8
+    MIN_SIMILARITY = 0.6
     SUBSTRING_BOOST = 0.20
 
     query_lower = query.lower()
