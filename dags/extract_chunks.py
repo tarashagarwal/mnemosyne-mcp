@@ -6,7 +6,7 @@ from docling.document_converter import DocumentConverter
 from pypdf import PdfReader, PdfWriter
 
 
-def extract_pdf_pages(
+def extract_pdf_chunks(
     pdf_path: str,
     book_name: str,
     output_dir: Optional[str] = None,
@@ -23,7 +23,7 @@ def extract_pdf_pages(
     project_root = Path(__file__).resolve().parents[1]
 
     if output_dir is None:
-        output_dir = project_root / "temp_docs"
+        output_dir = project_root / "temp_docs" / "chunks"
     else:
         output_dir = Path(output_dir)
 
@@ -83,7 +83,7 @@ def main():
     book_name = "future_queen"
     output_dir = project_root / "temp_docs"
 
-    extract_pdf_pages(
+    extract_pdf_chunks(
         pdf_path=str(pdf_path),
         book_name=book_name,
         output_dir=str(output_dir),

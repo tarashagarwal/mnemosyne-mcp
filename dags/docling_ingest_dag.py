@@ -11,8 +11,8 @@ if str(dags_dir) not in sys.path:
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime
-from extract_pages import extract_pdf_pages
-from process_documents import process_documents
+from extract_chunks import extract_pdf_chunks
+from process_chunks import process_chunks
 from mark_book_available import mark_book_available
 # Load books from books.json
 project_root = Path(__file__).parent.parent
@@ -55,22 +55,22 @@ with DAG(
         pdf_path = project_root / "docs" / file_name
         
         # Create extract task for this book
-        extract_task = PythonOperator(
+        extract_chunks_task = PythonOperator(
             task_id=f"extract_pdf_pages_{book_name}",
-            python_callable=extract_pdf_pages,
+            python_callable=extract_pdf_chunks,
             op_kwargs={
                 "pdf_path": str(pdf_path),
                 "book_name": book_name,
-                "output_dir": str(project_root / "temp_docs" / book_name)
+                "output_dir": str(project_root / "temp_docs" / "chunks")
             }
         )
         
         # Create process task for this book
-        process_task = PythonOperator(
-            task_id=f"process_documents_{book_name}",
-            python_callable=process_documents,
+        process_chunks_task = PythonOperator(
+            task_id=f"process_chunks_{book_name}",
+            python_callable=process_chunks,
             op_kwargs={
-                "input_dir": f"temp_docs/{book_name}",
+                "input_dir": f"temp_docs/chunks",
                 "book_name": title.lower()
             }
         )
@@ -85,4 +85,4 @@ with DAG(
         )
         
         # Set dependencies: process runs after extract, mark_available runs after process
-        extract_task >> process_task >> mark_available_task
+        extract_chunks_task >> process_chunks_task >> mark_available_task
