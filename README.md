@@ -1,7 +1,7 @@
 # mnemosyne-mcp
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/ebf5b04e-5270-40a1-b64e-686a7c2b87bd" width="700">
+  <img src="https://github.com/user-attachments/assets/362cb2d9-102c-4a48-834c-c400a60ce458" width="700">
 </p>
 
 **Persistent knowledge and memory infrastructure for AI systems**
