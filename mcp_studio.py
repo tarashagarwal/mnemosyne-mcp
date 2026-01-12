@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict
+from datetime import datetime
 from mcp.server.fastmcp import FastMCP
 from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
@@ -186,6 +187,204 @@ def check_book_availability(
             "available": False,
             "message": f"Error checking book availability: {str(e)}",
             "book": None
+        }
+
+
+def get_last_page(book_name: str) -> Optional[int]:
+    """
+    Get the last accessed page number for a book from MongoDB.
+    """
+    try:
+        mongo_client = get_mongo_client()
+        db_name = get_database_name()
+        db = mongo_client[db_name]
+        last_page_collection = db["last_page"]
+        
+        # Search for last page record (book_name is stored in lowercase)
+        record = last_page_collection.find_one({"book_name": book_name.lower()})
+        
+        mongo_client.close()
+        
+        if record:
+            return record.get("page_number")
+        return None
+    except Exception as e:
+        print(f"Error getting last page: {str(e)}")
+        return None
+
+
+def update_last_page(book_name: str, page_number: int) -> bool:
+    """
+    Update the last accessed page number for a book in MongoDB.
+    """
+    try:
+        mongo_client = get_mongo_client()
+        db_name = get_database_name()
+        db = mongo_client[db_name]
+        last_page_collection = db["last_page"]
+        
+        # Upsert the last page record
+        last_page_collection.update_one(
+            {"book_name": book_name.lower()},
+            {
+                "$set": {
+                    "book_name": book_name.lower(),
+                    "page_number": page_number,
+                    "updated_at": datetime.now().isoformat()
+                }
+            },
+            upsert=True
+        )
+        
+        mongo_client.close()
+        return True
+    except Exception as e:
+        print(f"Error updating last page: {str(e)}")
+        return False
+
+
+def get_page_from_db(book_name: str, page_number: int) -> Optional[Dict]:
+    """
+    Get a specific page from MongoDB pages collection.
+    """
+    try:
+        mongo_client = get_mongo_client()
+        db_name = get_database_name()
+        db = mongo_client[db_name]
+        pages_collection = db["pages"]
+        
+        # Search for the page (book_name and page_number are stored in lowercase/number)
+        page = pages_collection.find_one({
+            "book_name": book_name.lower(),
+            "page_number": page_number
+        })
+        
+        mongo_client.close()
+        
+        if page:
+            # Remove MongoDB _id and return page data
+            page_data = {
+                "book_name": page.get("book_name"),
+                "page_number": page.get("page_number"),
+                "page_text": page.get("page_text"),
+                "source_file": page.get("source_file"),
+            }
+            return page_data
+        return None
+    except Exception as e:
+        print(f"Error getting page from database: {str(e)}")
+        return None
+
+
+@mcp.tool()
+def get_page(book_name: str, page_number: Optional[int] = None) -> Dict:
+    """
+    Get a page from a book by name and page number.
+    If page_number is not provided, starts from the last accessed page.
+    Stores the accessed page number in MongoDB 'last_page' collection.
+    
+    Args:
+        book_name: Name of the book (case-insensitive)
+        page_number: Optional page number. If not provided, uses last accessed page or starts from page 1.
+    
+    Returns:
+        Dictionary with page information including page_text, page_number, book_name, and message.
+    """
+    try:
+        # If page_number not provided, get from last_page collection or default to 1
+        if page_number is None:
+            last_page = get_last_page(book_name)
+            page_number = last_page if last_page is not None else 1
+        
+        # Get the page from MongoDB
+        page_data = get_page_from_db(book_name, page_number)
+        
+        if not page_data:
+            return {
+                "success": False,
+                "message": f"Page {page_number} not found for book '{book_name}'",
+                "book_name": book_name.lower(),
+                "page_number": page_number,
+                "page_text": None
+            }
+        
+        # Update last page in MongoDB
+        update_last_page(book_name, page_number)
+        
+        return {
+            "success": True,
+            "message": f"Retrieved page {page_number} from '{book_name}'",
+            "book_name": page_data["book_name"],
+            "page_number": page_data["page_number"],
+            "page_text": page_data["page_text"],
+            "source_file": page_data.get("source_file")
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Error retrieving page: {str(e)}",
+            "book_name": book_name.lower() if book_name else None,
+            "page_number": page_number,
+            "page_text": None
+        }
+
+
+@mcp.tool()
+def get_next_page(book_name: str) -> Dict:
+    """
+    Get the next page for a book and update the last page tracker.
+    Increments the current last page by 1 and retrieves that page.
+    
+    Args:
+        book_name: Name of the book (case-insensitive)
+    
+    Returns:
+        Dictionary with next page information including page_text, page_number, book_name, and message.
+    """
+    try:
+        # Get current last page
+        last_page = get_last_page(book_name)
+        
+        # If no last page exists, start from page 1
+        if last_page is None:
+            next_page_number = 1
+        else:
+            next_page_number = last_page + 1
+        
+        # Get the next page
+        page_data = get_page_from_db(book_name, next_page_number)
+        
+        if not page_data:
+            return {
+                "success": False,
+                "message": f"Next page ({next_page_number}) not found for book '{book_name}'. You may have reached the end of the book.",
+                "book_name": book_name.lower(),
+                "page_number": next_page_number,
+                "page_text": None,
+                "is_end_of_book": True
+            }
+        
+        # Update last page to the next page
+        update_last_page(book_name, next_page_number)
+        
+        return {
+            "success": True,
+            "message": f"Retrieved next page ({next_page_number}) from '{book_name}'",
+            "book_name": page_data["book_name"],
+            "page_number": page_data["page_number"],
+            "page_text": page_data["page_text"],
+            "source_file": page_data.get("source_file"),
+            "is_end_of_book": False
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Error retrieving next page: {str(e)}",
+            "book_name": book_name.lower() if book_name else None,
+            "page_number": None,
+            "page_text": None
         }
 
 
